@@ -51,7 +51,7 @@ void update_firmware( Stream *in, Stream *out,
   out->printf( "reading hex lines...\n" );
 
   // read and process intel hex lines until EOF or error
-  while (!hex.eof)  {
+  while (!hex.eof  && in->available())  {
 
     read_ascii_line( in, line, sizeof(line) );
     // reliability of transfer via USB is improved by this printf/flush
@@ -62,6 +62,7 @@ void update_firmware( Stream *in, Stream *out,
 
     if (parse_hex_line( (const char*)line, hex.data, &hex.addr, &hex.num, &hex.code ) == 0) {
       out->printf( "abort - bad hex line %s\n", line );
+      return;
     }
     else if (process_hex_record( &hex ) != 0) { // error on bad hex code
       out->printf( "abort - invalid hex code %d\n", hex.code );
@@ -112,21 +113,24 @@ void update_firmware( Stream *in, Stream *out,
   }
   
   // get user input to write to flash or abort
-  int user_lines = -1;
-  while (user_lines != hex.lines && user_lines != 0) {
-    out->printf( "enter %d to flash or 0 to abort\n", hex.lines );
-    read_ascii_line( out, line, sizeof(line) );
-    sscanf( line, "%d", &user_lines );
-  }
+  // int user_lines = -1;
+  // while (user_lines != hex.lines && user_lines != 0) {
+  //   out->printf( "enter %d to flash or 0 to abort\n", hex.lines );
+  //   // Changed the next line to read from "in", the same place image was read.
+  //   // This allows "out" to be used for debug output if needed.
+  //   read_ascii_line( out, line, sizeof(line) );
+  //   sscanf( line, "%d", &user_lines );
+  // }
   
-  if (user_lines == 0) {
-    out->printf( "abort - user entered 0 lines\n" );
-    return;
-  }
-  else {
+  // if (user_lines == 0) {
+  //   out->printf( "abort - user entered 0 lines\n" );
+  //   return;
+  // }
+  // else {
     out->printf( "calling flash_move() to load new firmware...\n" );
+    out->printf( "REBOOT after done\n" );
     out->flush();
-  }
+  // }
   
   // move new program from buffer to flash, free buffer, and reboot
   flash_move( FLASH_BASE_ADDR, buffer_addr, hex.max-hex.min );
@@ -236,6 +240,7 @@ int parse_hex_line( const char *theline, char *bytes,
   int temp;
 
   *num = 0;
+  delay(2); // Delay a short moment to allow for `theline` to be saved before accessing it... Don't believe this is necessary? Remove this line and see what happens...
   if (theline[0] != ':')
     return 0;
   if (strlen (theline) < 11)
